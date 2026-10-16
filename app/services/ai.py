@@ -109,7 +109,9 @@ async def analyze(it: Interaction) -> dict[str, Any]:
             {"role": "user", "content": _build_user_content(it)},
         ],
         "temperature": 0.1,
-        "max_tokens": 350,
+        # gpt-oss gibi reasoning modelleri JSON'dan önce "düşünme" token'ı
+        # harcar; düşük limit JSON tamamlanmadan dolup 400 verir. Bol tutuyoruz.
+        "max_tokens": 2000,
         "response_format": {"type": "json_object"},
     }
     async with httpx.AsyncClient(timeout=10.0) as client:
