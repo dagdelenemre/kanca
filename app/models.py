@@ -5,12 +5,13 @@ Interaction kaydına indirgenir ve bir token (kanca) ile ilişkilendirilir.
 """
 from __future__ import annotations
 
+import base64
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
 
 
 def _utcnow() -> datetime:
@@ -63,3 +64,9 @@ class Interaction(BaseModel):
     size_bytes: int = 0
     ai_report: Optional[dict[str, Any]] = None
     group_id: Optional[str] = None
+
+    @field_serializer("raw", when_used="json")
+    def _ser_raw(self, v: bytes) -> str:
+        # Ham veri ikili olabilir (DNS paketi vb.); JSON'a base64 olarak çıkar
+        # ki UTF-8 çözümleme patlamasın.
+        return base64.b64encode(v).decode("ascii")
