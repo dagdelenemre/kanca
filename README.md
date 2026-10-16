@@ -88,3 +88,41 @@ curl https://panel.alan.com/api/interactions -H "X-Admin-Token: $ADMIN_TOKEN"
 # Canlı yayın (EventSource header gönderemediği için token query ile)
 #   https://panel.alan.com/api/stream?token=$ADMIN_TOKEN
 ```
+
+## Wildcard TLS (`*.oob`) — DNS-01
+
+`oob` alt alanı kendi DNS sunucumuza delege olduğu için, Let's Encrypt
+doğrulamasını (DNS-01) kendi sunucumuz yanıtlar — Cloudflare API'si gerekmez.
+Kanca DNS sunucusu `_acme-challenge.{BASE_DOMAIN}` TXT sorgusunu, certbot auth
+hook'unun `data/acme_challenge.txt`'ye yazdığı değerle yanıtlar.
+
+Sertifikayı al (sıra önemli: önce kanca güncel çalışıyor olmalı):
+
+```bash
+docker compose run --rm certbot certonly \
+  --manual --preferred-challenges dns \
+  --manual-auth-hook "sh /hooks/auth.sh" \
+  --manual-cleanup-hook "sh /hooks/cleanup.sh" \
+  --cert-name oob -d "*.oob.alan.com" \
+  --agree-tos -m you@example.com --non-interactive
+```
+
+Sonra Caddy'yi başlat (`*.oob`'u sertifikayla sunar) ve `.env`'de
+`CAPTURE_SCHEME=https` yap:
+
+```bash
+docker compose up -d caddy
+sed -i 's/^CAPTURE_SCHEME=.*/CAPTURE_SCHEME=https/' .env
+docker compose up -d --force-recreate kanca
+```
+
+### Yenileme (90 günde bir)
+
+Sertifika ~90 günde dolar. Haftalık cron ekle (`crontab -e`):
+
+```
+0 3 * * 1 cd /opt/kanca && docker compose run --rm certbot renew && docker compose restart caddy
+```
+
+`certbot renew` kayıtlı manual hook'ları yeniden çalıştırır; `restart caddy`
+yeni sertifikayı yükler.
