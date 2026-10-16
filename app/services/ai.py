@@ -121,6 +121,9 @@ async def analyze(it: Interaction) -> dict[str, Any]:
             },
             json=payload,
         )
+        if resp.status_code >= 400:
+            # Sebebi görebilmek için sağlayıcının hata gövdesini logla.
+            log.warning("Groq %s yaniti: %s", resp.status_code, resp.text[:600])
         resp.raise_for_status()
         data = resp.json()
         return json.loads(data["choices"][0]["message"]["content"])
