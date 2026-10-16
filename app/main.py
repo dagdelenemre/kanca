@@ -26,6 +26,7 @@ from app.config import get_settings
 from app.eventbus import EventBus
 from app.listeners import http_capture
 from app.listeners.dns_server import DNSServer
+from app.listeners.tcp_listeners import LDAPServer, SMTPServer
 from app.routers import panel
 from app.services.pipeline import Pipeline
 from app.storage import Storage
@@ -73,11 +74,30 @@ def _make_lifespan(*extra_apps: FastAPI):
             log.warning("DNS dinleyici baslatilamadi (%s): %s", settings.dns_udp_port, exc)
             dns = None
 
+        # SMTP / LDAP dinleyiciler (her biri bağımsız; biri açılmazsa diğerleri
+        # çalışmaya devam eder). Port 25 çoğu sağlayıcıda kapalı olabilir.
+        tcp_servers = []
+        for name, port, cls in (
+            ("SMTP", settings.smtp_port, SMTPServer),
+            ("LDAP", settings.ldap_port, LDAPServer),
+        ):
+            if port <= 0:
+                continue
+            srv = cls(app.state)
+            try:
+                await srv.start()
+                log.info("%s dinleyici basladi (port %s)", name, port)
+                tcp_servers.append(srv)
+            except OSError as exc:
+                log.warning("%s dinleyici baslatilamadi (%s): %s", name, port, exc)
+
         try:
             yield
         finally:
             if dns is not None:
                 await dns.stop()
+            for srv in tcp_servers:
+                await srv.stop()
             await pipeline.shutdown()
             await storage.close()
 

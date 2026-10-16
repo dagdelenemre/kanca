@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     dns_udp_port: int = 53
     dns_tcp_port: int = 53
 
+    # SMTP / LDAP dinleyiciler (0 = kapalı). Port 25 çoğu sağlayıcıda kapalıdır.
+    smtp_port: int = 25
+    ldap_port: int = 389
+
     # Depolama
     db_path: str = "data/kanca.db"
 

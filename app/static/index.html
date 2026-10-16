@@ -75,6 +75,8 @@
   }
   .badge.http { background: #0c4a6e; color: #bae6fd; }
   .badge.dns  { background: #3b0764; color: #e9d5ff; }
+  .badge.smtp { background: #422006; color: #fed7aa; }
+  .badge.ldap { background: #052e16; color: #bbf7d0; }
   .meth { font-family: ui-monospace, monospace; font-weight: 700; }
   .ix .path { font-family: ui-monospace, monospace; color: var(--text); word-break: break-all; }
   .ix .meta { color: var(--muted); font-size: 12px; margin-left: auto; white-space: nowrap; }
@@ -267,9 +269,12 @@ function renderInteraction(it) {
   if (proto === "dns") {
     sum.appendChild(el("span", "meth", it.parsed.qtype || "?"));
     sum.appendChild(el("span", "path", it.parsed.qname || ""));
-  } else {
+  } else if (proto === "http") {
     sum.appendChild(el("span", "meth", it.parsed.method || "?"));
     sum.appendChild(el("span", "path", it.parsed.path || "/"));
+  } else {
+    sum.appendChild(el("span", "meth", proto.toUpperCase()));
+    sum.appendChild(el("span", "path", it.parsed.summary || it.parsed.rcpt || ""));
   }
   sum.appendChild(el("span", "meta", `${it.source_ip} · ${fmtTime(it.timestamp)}`));
   det.appendChild(sum);
@@ -285,7 +290,7 @@ function renderInteraction(it) {
     body.appendChild(risk);
     body.appendChild(el("pre", "", it.ai_report.summary || ""));
   }
-  if (proto !== "dns") {
+  if (proto === "http") {
     body.appendChild(el("h4", "", "Başlıklar"));
     body.appendChild(el("pre", "", kvText(it.parsed.headers)));
     if (it.parsed.query && it.parsed.query.length) {
@@ -294,6 +299,9 @@ function renderInteraction(it) {
     }
     body.appendChild(el("h4", "", "Gövde"));
     body.appendChild(el("pre", "", bodyText(it.parsed.body)));
+  } else if (proto === "smtp" || proto === "ldap") {
+    body.appendChild(el("h4", "", "İçerik"));
+    body.appendChild(el("pre", "", it.parsed.preview || "(yok)"));
   }
   det.appendChild(body);
   return det;
