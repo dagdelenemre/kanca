@@ -23,11 +23,24 @@ services:
     environment:
       PANEL_HOST: ${PANEL_DOMAIN}
       CAPTURE_HOST: ${BASE_DOMAIN}
+      CERT_NAME: ${CERT_NAME:-oob}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./letsencrypt:/letsencrypt:ro   # certbot'un ürettiği wildcard sertifika
       - caddy_data:/data
       - caddy_config:/config
     restart: unless-stopped
+
+  # Wildcard (*.oob) TLS için Let's Encrypt DNS-01 sertifikası.
+  # Otomatik başlamaz; elle çalıştırılır (bkz. README):
+  #   docker compose run --rm certbot certonly ...
+  certbot:
+    image: certbot/certbot
+    profiles: ["certbot"]
+    volumes:
+      - ./data:/data                    # acme_challenge.txt'yi DNS ile paylaşır
+      - ./letsencrypt:/etc/letsencrypt
+      - ./acme:/hooks:ro
 
 volumes:
   caddy_data:

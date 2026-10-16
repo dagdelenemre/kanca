@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import struct
 
-from dnslib import QTYPE, RR, A, DNSRecord
+from dnslib import QTYPE, RR, TXT, A, DNSRecord
 
 from app.config import get_settings
 from app.models import Interaction, Protocol
@@ -43,17 +43,32 @@ class _Handler:
 
         qname = str(request.q.qname)
         qtype = QTYPE[request.q.qtype]
-        token = _resolve_token(qname, self.settings.base_domain)
+        reply = request.reply()
 
+        # ACME DNS-01: _acme-challenge.{base_domain} TXT sorgusunu, certbot'un
+        # paylaşımlı dosyaya yazdığı değer(ler)le yanıtla (*.oob wildcard TLS).
+        acme_name = f"_acme-challenge.{self.settings.base_domain}".rstrip(".").lower()
+        if qtype in ("TXT", "ANY") and qname.rstrip(".").lower() == acme_name:
+            for val in self._acme_values():
+                reply.add_answer(RR(qname, QTYPE.TXT, rdata=TXT(val), ttl=1))
+            return reply.pack()
+
+        token = _resolve_token(qname, self.settings.base_domain)
         if token is not None:
             asyncio.create_task(self._record(token, qname, qtype, source_ip, data))
 
-        reply = request.reply()
         if qtype in ("A", "ANY"):
             reply.add_answer(
                 RR(qname, QTYPE.A, rdata=A(self.settings.public_ip), ttl=60)
             )
         return reply.pack()
+
+    def _acme_values(self) -> list[str]:
+        try:
+            with open(self.settings.acme_challenge_path, encoding="utf-8") as f:
+                return [ln.strip() for ln in f if ln.strip()]
+        except OSError:
+            return []
 
     async def _record(
         self, token: str, qname: str, qtype: str, source_ip: str, raw: bytes

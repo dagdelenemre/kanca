@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     # Depolama
     db_path: str = "data/kanca.db"
 
+    # ACME DNS-01 (wildcard TLS): certbot auth hook'unun TXT değerini yazdığı,
+    # DNS sunucusunun okuduğu paylaşımlı dosya.
+    acme_challenge_path: str = "data/acme_challenge.txt"
+
     # Gruplama penceresi (saniye): aynı token için bu süre içindeki
     # etkileşimler tek bildirimde toplanır.
     group_window_s: float = 5.0

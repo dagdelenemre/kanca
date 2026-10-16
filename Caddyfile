@@ -1,19 +1,29 @@
-# Kanca reverse proxy — otomatik Let's Encrypt TLS.
+# Kanca reverse proxy — Let's Encrypt TLS.
 #
-# Panel HTTPS'te sunulur (admin token şifreli gider). Yakalama uçları (*.oob)
-# HTTP'de kalır; OOB hedefleri genelde düz HTTP kullanır ve .dev HSTS zorlaması
-# tarayıcı dışı istemcileri etkilemez. Wildcard TLS (DNS-01) ileride eklenebilir.
+# Panel HTTPS (admin token şifreli gider). Yakalama uçları (*.oob) hem HTTP hem
+# HTTPS: OOB hedefleri genelde düz HTTP kullanır, ama HTTPS zorlayan hedefler ve
+# tarayıcıda tıklanabilir adresler için wildcard sertifika da sunulur.
 #
-# PANEL_HOST ve CAPTURE_HOST .env'den gelir (docker-compose env ile aktarılır).
+# PANEL_HOST / CAPTURE_HOST / CERT_NAME .env'den docker-compose ile aktarılır.
+# Wildcard sertifika certbot ile DNS-01 üzerinden alınır (bkz. README); Caddy
+# onu dosyadan kullanır. Sertifika dosyası yoksa bu site bloğu Caddy'yi
+# başlatmaz — önce certbot'u çalıştırıp sonra caddy'yi yeniden başlat.
 
 {$PANEL_HOST} {
 	reverse_proxy kanca:8000
 }
 
+# Düz HTTP yakalama (yönlendirme yok — ham isteği yakalar).
 http://*.{$CAPTURE_HOST} {
 	reverse_proxy kanca:8000 {
-		# Gerçek kaynak IP'yi aktar; istemcinin gönderdiğini değil, gerçek
-		# uzak adresi yaz (XFF spoofing'i engeller).
+		header_up X-Forwarded-For {remote_host}
+	}
+}
+
+# HTTPS yakalama — certbot'un ürettiği wildcard sertifikayla.
+*.{$CAPTURE_HOST} {
+	tls /letsencrypt/live/{$CERT_NAME}/fullchain.pem /letsencrypt/live/{$CERT_NAME}/privkey.pem
+	reverse_proxy kanca:8000 {
 		header_up X-Forwarded-For {remote_host}
 	}
 }
