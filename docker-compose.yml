@@ -1,0 +1,11 @@
+services:
+  kanca:
+    build: .
+    env_file: .env
+    ports:
+      - "8000:8000"      # HTTP (reverse proxy TLS'i sonlandırır)
+      - "53:53/udp"      # DNS
+      - "53:53/tcp"      # DNS
+    volumes:
+      - ./data:/app/data # SQLite kalıcılığı (konteyner dışı)
+    restart: unless-stopped

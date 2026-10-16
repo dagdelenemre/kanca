@@ -1,0 +1,8 @@
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pydantic>=2.7
+pydantic-settings>=2.3
+aiosqlite>=0.20
+httpx>=0.27
+dnslib>=0.9.24
+nopanic>=0.3.0
