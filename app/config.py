@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     panel_base_url: str = "http://localhost:8000"
     base_domain: str = "oob.dagdelen.dev"   # host modu yakalama kök alanı
     panel_domain: str = "panel.dagdelen.dev"  # host modu panel alanı
+    # host modunda gösterilen yakalama adresinin şeması. TLS yokken "http",
+    # sertifika kurulunca "https" yapılır.
+    capture_scheme: str = "https"
     public_ip: str = "127.0.0.1"            # DNS A yanıtlarında döndürülür
     max_body_bytes: int = 2 * 1024 * 1024   # 2 MB
 
@@ -57,7 +60,7 @@ class Settings(BaseSettings):
     def capture_url(self, token: str) -> str:
         """Bir kancanın kullanıcıya gösterilecek HTTP yakalama adresi."""
         if self.capture_mode == "host":
-            return f"https://{token}.{self.base_domain}/"
+            return f"{self.capture_scheme}://{token}.{self.base_domain}/"
         return f"{self.panel_base_url.rstrip('/')}/c/{token}/"
 
     def dns_host(self, token: str) -> str:
