@@ -60,6 +60,22 @@ CREATE INDEX IF NOT EXISTS idx_inter_protocol
 """
 
 
+def _utf8_safe(obj):
+    """Yakalanan veride olabilecek lone-surrogate / geçersiz UTF-8'i temizler,
+    böylece SQLite TEXT sütununa yazılan değer her zaman geçerli UTF-8 olur."""
+    if isinstance(obj, str):
+        return obj.encode("utf-8", "replace").decode("utf-8")
+    if isinstance(obj, list):
+        return [_utf8_safe(x) for x in obj]
+    if isinstance(obj, dict):
+        return {_utf8_safe(k): _utf8_safe(v) for k, v in obj.items()}
+    return obj
+
+
+def _dumps(obj) -> str:
+    return json.dumps(_utf8_safe(obj), ensure_ascii=False)
+
+
 class Storage:
     def __init__(self, db_path: str) -> None:
         self._db_path = db_path
@@ -68,6 +84,9 @@ class Storage:
     async def connect(self) -> None:
         os.makedirs(os.path.dirname(self._db_path) or ".", exist_ok=True)
         self._db = await aiosqlite.connect(self._db_path)
+        # Yakalanan veri ikili/bozuk olabilir; eski kayıtlar geçersiz UTF-8
+        # içerse bile okuma çökmesin diye bozuk byte'ları değiştirerek çöz.
+        self._db.text_factory = lambda b: b.decode("utf-8", "replace")
         await self._db.execute("PRAGMA journal_mode=WAL;")
         await self._db.execute("PRAGMA foreign_keys=ON;")
         await self._db.executescript(_SCHEMA)
@@ -166,9 +185,9 @@ class Storage:
                 it.source_ip,
                 it.source_host,
                 base64.b64encode(it.raw).decode("ascii"),
-                json.dumps(it.parsed, ensure_ascii=False),
+                _dumps(it.parsed),
                 it.size_bytes,
-                json.dumps(it.ai_report, ensure_ascii=False) if it.ai_report else None,
+                _dumps(it.ai_report) if it.ai_report else None,
                 it.group_id,
             ),
         )
@@ -178,7 +197,7 @@ class Storage:
     async def set_ai_report(self, interaction_id: str, report: dict) -> None:
         await self.db.execute(
             "UPDATE interactions SET ai_report = ? WHERE id = ?",
-            (json.dumps(report, ensure_ascii=False), interaction_id),
+            (_dumps(report), interaction_id),
         )
         await self.db.commit()
 

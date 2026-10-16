@@ -13,10 +13,14 @@ CAPTURE_MODE=host (üretim/VPS):
 """
 from __future__ import annotations
 
+import ipaddress
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from starlette.routing import Host, Mount
+
+log = logging.getLogger("kanca")
 
 from app.config import get_settings
 from app.eventbus import EventBus
@@ -44,12 +48,29 @@ def _make_lifespan(*extra_apps: FastAPI):
             a.state.bus = bus
             a.state.pipeline = pipeline
 
+        # PUBLIC_IP geçerli mi? (DNS A yanıtı bunu kullanır; geçersizse DNS
+        # sunucusu her yanıtta patlar — sessiz kalmasın diye erken uyar.)
+        try:
+            ipaddress.ip_address(settings.public_ip)
+        except ValueError:
+            log.warning(
+                "PUBLIC_IP gecersiz: %r — DNS yanitlari calismayacak. "
+                ".env'de gercek IP'yi ayarla.",
+                settings.public_ip,
+            )
+
         dns = DNSServer(app.state)
         try:
             await dns.start()
+            log.info(
+                "DNS dinleyici basladi (udp/tcp %s), A yaniti -> %s",
+                settings.dns_udp_port,
+                settings.public_ip,
+            )
         except OSError as exc:
             # 53 portu dolu/yetkisizse HTTP yakalama yine çalışsın.
             app.state.dns_error = str(exc)
+            log.warning("DNS dinleyici baslatilamadi (%s): %s", settings.dns_udp_port, exc)
             dns = None
 
         try:
