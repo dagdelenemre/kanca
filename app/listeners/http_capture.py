@@ -36,6 +36,15 @@ def resolve_token(host: str, base_domain: str) -> str | None:
     return labels[-1] if labels and labels[-1] else None
 
 
+def _client_ip(request: Request) -> str:
+    """Gerçek kaynak IP. Caddy arkasındayken X-Forwarded-For'u kullanır
+    (Caddy bunu gerçek uzak adresle set eder, istemci spoof'u geçmez)."""
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
 async def _read_limited(request: Request, limit: int) -> tuple[bytes, bool]:
     """Gövdeyi akarak okur; limit aşılırsa keser. (veri, kesildi_mi)."""
     # Content-Length erken ret için kontrol edilir.
@@ -87,7 +96,7 @@ async def _process_capture(
     interaction = Interaction(
         token=token,
         protocol=Protocol.HTTP,
-        source_ip=request.client.host if request.client else "unknown",
+        source_ip=_client_ip(request),
         raw=raw,
         size_bytes=len(raw),
         parsed={

@@ -1,0 +1,19 @@
+# Kanca reverse proxy — otomatik Let's Encrypt TLS.
+#
+# Panel HTTPS'te sunulur (admin token şifreli gider). Yakalama uçları (*.oob)
+# HTTP'de kalır; OOB hedefleri genelde düz HTTP kullanır ve .dev HSTS zorlaması
+# tarayıcı dışı istemcileri etkilemez. Wildcard TLS (DNS-01) ileride eklenebilir.
+#
+# PANEL_HOST ve CAPTURE_HOST .env'den gelir (docker-compose env ile aktarılır).
+
+{$PANEL_HOST} {
+	reverse_proxy kanca:8000
+}
+
+http://*.{$CAPTURE_HOST} {
+	reverse_proxy kanca:8000 {
+		# Gerçek kaynak IP'yi aktar; istemcinin gönderdiğini değil, gerçek
+		# uzak adresi yaz (XFF spoofing'i engeller).
+		header_up X-Forwarded-For {remote_host}
+	}
+}

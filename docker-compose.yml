@@ -2,10 +2,31 @@ services:
   kanca:
     build: .
     env_file: .env
+    expose:
+      - "8000"           # yalnızca iç ağ; dışarıya Caddy açar
     ports:
-      - "8000:8000"      # HTTP (reverse proxy TLS'i sonlandırır)
-      - "53:53/udp"      # DNS
-      - "53:53/tcp"      # DNS
+      - "53:53/udp"      # DNS yakalama (doğrudan, proxy'siz)
+      - "53:53/tcp"
     volumes:
-      - ./data:/app/data # SQLite kalıcılığı (konteyner dışı)
+      - ./data:/app/data # SQLite kalıcılığı
     restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    depends_on:
+      - kanca
+    ports:
+      - "80:80"          # ACME HTTP-01 + HTTP yakalama (*.oob)
+      - "443:443"        # Panel HTTPS
+    environment:
+      PANEL_HOST: ${PANEL_DOMAIN}
+      CAPTURE_HOST: ${BASE_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:
