@@ -1,8 +1,11 @@
 """HTTP(S) yakalama uçları + mock motoru.
 
-Yakalama vhost'u (base_domain altındaki herhangi bir alt alan) üzerindeki tüm
-istekleri yakalar. Host header'ından token çözülür, istek kaydedilir, arka plan
-AI/bildirim hattı tetiklenir ve kancanın mock kuralına göre yanıt döner.
+İki modu da destekler:
+  * host modu  → token Host header'ından çözülür ({token}.base_domain)
+  * path modu  → token yoldan çözülür (/c/{token}/...), yerel/geliştirme için
+
+İstek kaydedilir, arka plan AI/bildirim hattı tetiklenir ve kancanın mock
+kuralına göre yanıt döner.
 """
 from __future__ import annotations
 
@@ -14,7 +17,12 @@ from app.config import get_settings
 from app.models import Interaction, MockConfig, Protocol
 from app.parsing import multi_items, parse_http_body
 
-router = APIRouter()
+_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"]
+
+# host modu: yakalama alt alanındaki her yolu yakalar (catch-all).
+host_router = APIRouter()
+# path modu: /c/{token}/... altındaki her yolu yakalar.
+path_router = APIRouter()
 
 
 def resolve_token(host: str, base_domain: str) -> str | None:
@@ -44,19 +52,30 @@ async def _read_limited(request: Request, limit: int) -> tuple[bytes, bool]:
     return b"".join(chunks), False
 
 
-@router.api_route(
-    "/{path:path}",
-    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"],
-)
-async def capture(path: str, request: Request, background_tasks: BackgroundTasks):
+@host_router.api_route("/{path:path}", methods=_METHODS)
+async def capture_host(path: str, request: Request, background_tasks: BackgroundTasks):
+    settings = get_settings()
+    token = resolve_token(request.headers.get("host", ""), settings.base_domain)
+    if token is None:
+        return Response(content="Kanca bulunamadı", status_code=404)
+    return await _process_capture(request, background_tasks, token, path)
+
+
+@path_router.api_route("/c/{token}", methods=_METHODS)
+@path_router.api_route("/c/{token}/{path:path}", methods=_METHODS)
+async def capture_path(
+    token: str, request: Request, background_tasks: BackgroundTasks, path: str = ""
+):
+    return await _process_capture(request, background_tasks, token, path)
+
+
+async def _process_capture(
+    request: Request, background_tasks: BackgroundTasks, token: str, path: str
+) -> Response:
     settings = get_settings()
     storage = request.app.state.storage
     bus = request.app.state.bus
     pipeline = request.app.state.pipeline
-
-    token = resolve_token(request.headers.get("host", ""), settings.base_domain)
-    if token is None:
-        return Response(content="Kanca bulunamadı", status_code=404)
 
     hook = await storage.get_hook(token)
     if hook is None:

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -33,15 +34,23 @@ async def create_hook(body: CreateHookIn, request: Request):
     await request.app.state.storage.create_hook(hook)
     return {
         "token": hook.token,
-        "http_url": f"https://{hook.token}.{settings.base_domain}/",
-        "dns_host": f"{hook.token}.{settings.base_domain}",
+        "http_url": settings.capture_url(hook.token),
+        "dns_host": settings.dns_host(hook.token),
+        "capture_mode": settings.capture_mode,
     }
 
 
 @router.get("/api/hooks", dependencies=[Depends(require_admin)])
 async def list_hooks(request: Request):
+    settings = get_settings()
     hooks = await request.app.state.storage.list_hooks()
-    return [h.model_dump(mode="json") for h in hooks]
+    out = []
+    for h in hooks:
+        d = h.model_dump(mode="json")
+        d["http_url"] = settings.capture_url(h.token)
+        d["dns_host"] = settings.dns_host(h.token)
+        out.append(d)
+    return out
 
 
 @router.put("/api/hooks/{token}/mock", dependencies=[Depends(require_admin)])
@@ -98,12 +107,10 @@ async def stream(request: Request, token: str = Query(default="")):
     return StreamingResponse(gen(), media_type="text/event-stream")
 
 
+_INDEX_PATH = os.path.join(os.path.dirname(__file__), "..", "static", "index.html")
+
+
 @router.get("/", response_class=HTMLResponse)
 async def index():
-    # v1: panel UI için yer tutucu. Gerçek arayüz ayrı aşamada eklenecek.
-    return HTMLResponse(
-        "<!doctype html><meta charset='utf-8'>"
-        "<title>Kanca</title>"
-        "<h1>Kanca paneli</h1>"
-        "<p>API hazır. Arayüz sonraki aşamada eklenecek.</p>"
-    )
+    with open(_INDEX_PATH, encoding="utf-8") as f:
+        return HTMLResponse(f.read())

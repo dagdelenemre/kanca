@@ -28,7 +28,24 @@ Sonraki aşama: SMTP/LDAP dinleyiciler, blind XSS probe üretici, panel arayüz�
 
 Ayrıntılar için [ARCHITECTURE.md](ARCHITECTURE.md).
 
-## Kurulum
+## Hızlı başlangıç (yerel / localhost)
+
+Alt alan gerektirmeyen **path modu** ile saniyeler içinde denenir:
+
+```bash
+pip install -r requirements.txt
+cp .env.example .env          # ADMIN_TOKEN'ı değiştir (CAPTURE_MODE=path zaten varsayılan)
+uvicorn app.main:app --reload --port 8000
+```
+Panel: <http://localhost:8000> — anahtarı gir, "Oluştur" de, verilen
+`http://localhost:8000/c/<token>/` adresine istek gönder; panelde anında görünür.
+
+> Yerelde DNS yakalamayı denemek için `.env`'de `DNS_UDP_PORT=5353` yap ve
+> `dig @127.0.0.1 -p 5353 test.<token>.oob.dagdelen.dev` ile sorgula.
+
+## Üretim kurulumu (VPS, host modu)
+
+Gerçek OOB (alt alan + DNS) için `.env`'de `CAPTURE_MODE=host` yap.
 
 ### 1. DNS / alan adı
 `oob.alan.com` için VPS'ini gösteren bir **NS** kaydı ve glue **A** kaydı tanımla.

@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kanca</title>
+<style>
+  :root {
+    --bg: #0f172a; --panel: #1e293b; --panel2: #273449; --line: #334155;
+    --text: #e2e8f0; --muted: #94a3b8; --accent: #38bdf8; --accent2: #0ea5e9;
+    --green: #22c55e; --yellow: #eab308; --orange: #f97316; --red: #ef4444;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    background: var(--bg); color: var(--text);
+  }
+  header {
+    display: flex; align-items: center; gap: 12px; padding: 14px 20px;
+    background: var(--panel); border-bottom: 1px solid var(--line);
+  }
+  header h1 { font-size: 20px; margin: 0; }
+  header .tag { color: var(--muted); font-size: 13px; }
+  header .spacer { flex: 1; }
+  button {
+    background: var(--accent2); color: #001018; border: 0; border-radius: 8px;
+    padding: 9px 14px; font-weight: 600; cursor: pointer; font-size: 14px;
+  }
+  button:hover { background: var(--accent); }
+  button.ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+  button.ghost:hover { color: var(--text); border-color: var(--accent); }
+  input {
+    background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+    border-radius: 8px; padding: 9px 12px; font-size: 14px;
+  }
+  .wrap { display: flex; height: calc(100vh - 57px); }
+  .side {
+    width: 300px; border-right: 1px solid var(--line); overflow-y: auto;
+    background: var(--panel); padding: 12px;
+  }
+  .side .create { display: flex; gap: 8px; margin-bottom: 12px; }
+  .side .create input { flex: 1; min-width: 0; }
+  .hook {
+    padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px;
+    margin-bottom: 8px; cursor: pointer; background: var(--panel2);
+  }
+  .hook:hover { border-color: var(--accent); }
+  .hook.active { border-color: var(--accent); background: #1d3a4d; }
+  .hook .label { font-weight: 600; }
+  .hook .tok { color: var(--muted); font-size: 12px; font-family: ui-monospace, monospace; word-break: break-all; }
+  .main { flex: 1; overflow-y: auto; padding: 20px; }
+  .empty { color: var(--muted); text-align: center; margin-top: 80px; }
+  .urlbox {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 14px 16px; margin-bottom: 18px;
+  }
+  .urlbox .hint { color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+  .urlrow { display: flex; gap: 8px; align-items: center; }
+  .urlrow code {
+    flex: 1; background: var(--panel2); padding: 10px 12px; border-radius: 8px;
+    font-family: ui-monospace, monospace; font-size: 13px; word-break: break-all;
+  }
+  .ix {
+    border: 1px solid var(--line); border-radius: 10px; margin-bottom: 10px;
+    background: var(--panel); overflow: hidden;
+  }
+  .ix summary {
+    list-style: none; cursor: pointer; padding: 12px 14px; display: flex;
+    gap: 10px; align-items: center;
+  }
+  .ix summary::-webkit-details-marker { display: none; }
+  .badge {
+    font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px;
+    letter-spacing: .3px;
+  }
+  .badge.http { background: #0c4a6e; color: #bae6fd; }
+  .badge.dns  { background: #3b0764; color: #e9d5ff; }
+  .meth { font-family: ui-monospace, monospace; font-weight: 700; }
+  .ix .path { font-family: ui-monospace, monospace; color: var(--text); word-break: break-all; }
+  .ix .meta { color: var(--muted); font-size: 12px; margin-left: auto; white-space: nowrap; }
+  .ix .body { padding: 0 14px 14px; border-top: 1px solid var(--line); }
+  .ix h4 { margin: 14px 0 6px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+  pre {
+    background: var(--panel2); padding: 10px 12px; border-radius: 8px; margin: 0;
+    overflow-x: auto; font-size: 12.5px; white-space: pre-wrap; word-break: break-word;
+  }
+  .risk { font-weight: 700; }
+  .risk.LOW, .risk.INFO { color: var(--green); }
+  .risk.MEDIUM { color: var(--yellow); }
+  .risk.HIGH { color: var(--orange); }
+  .risk.CRITICAL, .risk.UNKNOWN { color: var(--red); }
+  .gate {
+    max-width: 420px; margin: 100px auto; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 12px; padding: 24px;
+  }
+  .gate h2 { margin-top: 0; }
+  .gate p { color: var(--muted); }
+  .gate .row { display: flex; gap: 8px; margin-top: 12px; }
+  .gate input { flex: 1; }
+  .toast {
+    position: fixed; bottom: 20px; right: 20px; background: var(--accent2);
+    color: #001018; padding: 10px 16px; border-radius: 8px; font-weight: 600;
+    opacity: 0; transform: translateY(10px); transition: .2s; pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: none; }
+</style>
+</head>
+<body>
+
+<div id="gate" class="gate" style="display:none">
+  <h2>🪝 Kanca</h2>
+  <p>Devam etmek için yönetici anahtarını (<code>ADMIN_TOKEN</code>) gir.
+     Tarayıcında saklanır, sunucuya yalnızca istek başlığında gönderilir.</p>
+  <div class="row">
+    <input id="tokenInput" type="password" placeholder="ADMIN_TOKEN" autofocus>
+    <button onclick="saveToken()">Giriş</button>
+  </div>
+  <p id="gateErr" style="color:var(--red);display:none">Anahtar hatalı.</p>
+</div>
+
+<div id="app" style="display:none">
+  <header>
+    <h1>🪝 Kanca</h1>
+    <span class="tag">OOB etkileşim yakalayıcı</span>
+    <span class="spacer"></span>
+    <button class="ghost" onclick="logout()">Çıkış</button>
+  </header>
+  <div class="wrap">
+    <div class="side">
+      <div class="create">
+        <input id="labelInput" placeholder="Kanca adı (örn. test1)">
+        <button onclick="createHook()">+ Oluştur</button>
+      </div>
+      <div id="hookList"></div>
+    </div>
+    <div class="main" id="main">
+      <div class="empty">Soldan bir kanca seç ya da yeni bir tane oluştur.</div>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+let TOKEN = localStorage.getItem("kanca_token") || "";
+let SELECTED = null;
+let es = null;
+
+// --- kimlik ---------------------------------------------------------
+function headers() { return { "X-Admin-Token": TOKEN }; }
+
+async function saveToken() {
+  const t = $("tokenInput").value.trim();
+  if (!t) return;
+  TOKEN = t;
+  const r = await fetch("/api/hooks", { headers: { "X-Admin-Token": t } });
+  if (r.status === 401) { $("gateErr").style.display = "block"; return; }
+  localStorage.setItem("kanca_token", t);
+  start();
+}
+function logout() {
+  localStorage.removeItem("kanca_token"); TOKEN = "";
+  if (es) es.close();
+  location.reload();
+}
+
+// --- yardımcılar (XSS-güvenli DOM) ----------------------------------
+// Yakalanan veri ASLA innerHTML ile basılmaz; her şey textContent ile.
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 1800);
+}
+function fmtTime(iso) {
+  try { return new Date(iso).toLocaleTimeString("tr-TR"); } catch { return iso; }
+}
+
+// --- kancalar -------------------------------------------------------
+async function loadHooks() {
+  const r = await fetch("/api/hooks", { headers: headers() });
+  const hooks = await r.json();
+  const list = $("hookList");
+  list.replaceChildren();
+  if (!hooks.length) {
+    list.appendChild(el("p", "", "Henüz kanca yok."));
+    list.lastChild.style.color = "var(--muted)";
+  }
+  for (const h of hooks) {
+    const d = el("div", "hook" + (h.token === SELECTED ? " active" : ""));
+    d.appendChild(el("div", "label", h.label || "(isimsiz)"));
+    d.appendChild(el("div", "tok", h.token));
+    d.onclick = () => selectHook(h.token, h.http_url, h.dns_host);
+    list.appendChild(d);
+  }
+}
+
+async function createHook() {
+  const label = $("labelInput").value.trim();
+  const r = await fetch("/api/hooks", {
+    method: "POST",
+    headers: { ...headers(), "Content-Type": "application/json" },
+    body: JSON.stringify({ label }),
+  });
+  const h = await r.json();
+  $("labelInput").value = "";
+  await loadHooks();
+  selectHook(h.token, h.http_url, h.dns_host);
+  toast("Kanca oluşturuldu");
+}
+
+// --- seçili kanca + etkileşimler ------------------------------------
+async function selectHook(token, httpUrl, dnsHost) {
+  SELECTED = token;
+  await loadHooks();
+  const main = $("main");
+  main.replaceChildren();
+
+  // URL kutusu
+  const box = el("div", "urlbox");
+  box.appendChild(el("div", "hint",
+    "Bu adrese gelen HER istek aşağıda anında görünür. Hedefe bu adresi ver:"));
+  const row = el("div", "urlrow");
+  row.appendChild(el("code", "", httpUrl));
+  const copy = el("button", "", "Kopyala");
+  copy.onclick = () => { navigator.clipboard.writeText(httpUrl); toast("Kopyalandı"); };
+  row.appendChild(copy);
+  box.appendChild(row);
+  if (dnsHost) {
+    const dns = el("div", "hint", "DNS adı: " + dnsHost);
+    dns.style.marginTop = "8px";
+    box.appendChild(dns);
+  }
+  main.appendChild(box);
+
+  const listWrap = el("div"); listWrap.id = "ixList";
+  main.appendChild(listWrap);
+  await loadInteractions();
+}
+
+async function loadInteractions() {
+  if (!SELECTED) return;
+  const r = await fetch(`/api/hooks/${SELECTED}/interactions`, { headers: headers() });
+  const items = await r.json();
+  const wrap = $("ixList");
+  if (!wrap) return;
+  wrap.replaceChildren();
+  if (!items.length) {
+    const e = el("div", "empty", "Henüz istek yok. Yukarıdaki adrese bir istek gönder.");
+    wrap.appendChild(e);
+    return;
+  }
+  for (const it of items) wrap.appendChild(renderInteraction(it));
+}
+
+function renderInteraction(it) {
+  const det = el("details", "ix");
+  const sum = el("summary");
+  const proto = (it.protocol || "http");
+  sum.appendChild(el("span", "badge " + proto, proto.toUpperCase()));
+  if (proto === "dns") {
+    sum.appendChild(el("span", "meth", it.parsed.qtype || "?"));
+    sum.appendChild(el("span", "path", it.parsed.qname || ""));
+  } else {
+    sum.appendChild(el("span", "meth", it.parsed.method || "?"));
+    sum.appendChild(el("span", "path", it.parsed.path || "/"));
+  }
+  sum.appendChild(el("span", "meta", `${it.source_ip} · ${fmtTime(it.timestamp)}`));
+  det.appendChild(sum);
+
+  const body = el("div", "body");
+  // AI raporu (varsa)
+  if (it.ai_report) {
+    body.appendChild(el("h4", "", "AI analizi"));
+    const risk = el("div");
+    const rl = (it.ai_report.risk_level || "UNKNOWN");
+    risk.appendChild(el("span", "risk " + rl, rl));
+    risk.appendChild(el("span", "", "  ·  " + (it.ai_report.detected_type || "")));
+    body.appendChild(risk);
+    body.appendChild(el("pre", "", it.ai_report.summary || ""));
+  }
+  if (proto !== "dns") {
+    body.appendChild(el("h4", "", "Başlıklar"));
+    body.appendChild(el("pre", "", kvText(it.parsed.headers)));
+    if (it.parsed.query && it.parsed.query.length) {
+      body.appendChild(el("h4", "", "Query"));
+      body.appendChild(el("pre", "", kvText(it.parsed.query)));
+    }
+    body.appendChild(el("h4", "", "Gövde"));
+    body.appendChild(el("pre", "", bodyText(it.parsed.body)));
+  }
+  det.appendChild(body);
+  return det;
+}
+
+function kvText(pairs) {
+  if (!pairs || !pairs.length) return "(yok)";
+  return pairs.map(([k, v]) => `${k}: ${v}`).join("\n");
+}
+function bodyText(b) {
+  if (b === null || b === undefined) return "(boş)";
+  if (typeof b === "string") return b;
+  try { return JSON.stringify(b, null, 2); } catch { return String(b); }
+}
+
+// --- canlı yayın (SSE) ----------------------------------------------
+function connect() {
+  if (es) es.close();
+  es = new EventSource(`/api/stream?token=${encodeURIComponent(TOKEN)}`);
+  let timer = null;
+  es.onmessage = (ev) => {
+    let data; try { data = JSON.parse(ev.data); } catch { return; }
+    if (data.token && data.token === SELECTED) {
+      // Kısa debounce: aynı anda gelen birden fazla olayda tek yenileme.
+      clearTimeout(timer);
+      timer = setTimeout(loadInteractions, 250);
+      if (!data.type) toast("Yeni istek yakalandı");
+    } else if (data.token && !data.type) {
+      loadHooks();
+    }
+  };
+}
+
+// --- başlangıç ------------------------------------------------------
+function start() {
+  $("gate").style.display = "none";
+  $("app").style.display = "block";
+  loadHooks();
+  connect();
+}
+(function init() {
+  if (TOKEN) start();
+  else $("gate").style.display = "block";
+})();
+</script>
+</body>
+</html>

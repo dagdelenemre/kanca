@@ -1,12 +1,15 @@
-"""Uygulama girişi: host'a göre ayrılmış panel + yakalama + DNS dinleyici.
+"""Uygulama girişi: yakalama moduna göre yönlendirme + DNS dinleyici.
 
-Güvenlik açısından kritik ayrım (Host tabanlı yönlendirme):
-  * panel_domain  → panel_app (auth'lu /api ve arayüz)
-  * diğer tüm host'lar (base_domain alt alanları) → capture_app (yakalama)
+CAPTURE_MODE=path (yerel/geliştirme, varsayılan):
+  Tek uygulama. Panel ve /api aynı origin'de; yakalama /c/{token}/... altında.
+  localhost'ta alt alan ayarlanamadığı için pratik olan budur.
 
-Böylece bir saldırgan {token}.oob.../api/hooks adresine gitse bile panel API'si
-O host'ta HİÇ kayıtlı olmadığından yalnızca yakalama handler'ına düşer. /api
-uçları sadece panel host'unda var olur.
+CAPTURE_MODE=host (üretim/VPS):
+  Host tabanlı ayrım (güvenlik açısından kritik):
+    * panel_domain → panel_app (auth'lu /api ve arayüz)
+    * diğer host'lar (base_domain alt alanları) → capture_app (yakalama)
+  Böylece {token}.oob.../api/hooks adresinde /api HİÇ var olmaz; yalnızca
+  yakalama handler'ına düşer.
 """
 from __future__ import annotations
 
@@ -25,47 +28,54 @@ from app.storage import Storage
 
 settings = get_settings()
 
-panel_app = FastAPI(title="Kanca Panel")
-panel_app.include_router(panel.router)
 
-capture_app = FastAPI(title="Kanca Capture")
-capture_app.include_router(http_capture.router)
+def _make_lifespan(*extra_apps: FastAPI):
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        storage = Storage(settings.db_path)
+        await storage.connect()
+        bus = EventBus()
+        pipeline = Pipeline(storage, bus, settings.group_window_s)
 
+        # Paylaşılan servisleri (mount edilen) alt uygulamalara da bağla;
+        # onların kendi lifespan'i çalışmadığından state'i elle veriyoruz.
+        for a in (app, *extra_apps):
+            a.state.storage = storage
+            a.state.bus = bus
+            a.state.pipeline = pipeline
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    storage = Storage(settings.db_path)
-    await storage.connect()
-    bus = EventBus()
-    pipeline = Pipeline(storage, bus, settings.group_window_s)
+        dns = DNSServer(app.state)
+        try:
+            await dns.start()
+        except OSError as exc:
+            # 53 portu dolu/yetkisizse HTTP yakalama yine çalışsın.
+            app.state.dns_error = str(exc)
+            dns = None
 
-    # Paylaşılan servisleri alt uygulamalara da bağla (mount edilen alt
-    # uygulamaların kendi lifespan'i çalışmaz, state'i elle veriyoruz).
-    for a in (app, panel_app, capture_app):
-        a.state.storage = storage
-        a.state.bus = bus
-        a.state.pipeline = pipeline
+        try:
+            yield
+        finally:
+            if dns is not None:
+                await dns.stop()
+            await pipeline.shutdown()
+            await storage.close()
 
-    dns = DNSServer(app.state)
-    try:
-        await dns.start()
-    except OSError as exc:
-        # 53 portu doluysa (ör. systemd-resolved) HTTP yakalama yine çalışsın.
-        app.state.dns_error = str(exc)
-        dns = None
-
-    try:
-        yield
-    finally:
-        if dns is not None:
-            await dns.stop()
-        await pipeline.shutdown()
-        await storage.close()
+    return lifespan
 
 
-app = FastAPI(lifespan=lifespan, title="Kanca")
-# Host tabanlı yönlendirme: önce panel host'u, sonra her şey yakalamaya düşer.
-app.router.routes = [
-    Host(settings.panel_domain, app=panel_app, name="panel"),
-    Mount("/", app=capture_app, name="capture"),
-]
+if settings.capture_mode == "host":
+    panel_app = FastAPI(title="Kanca Panel")
+    panel_app.include_router(panel.router)
+    capture_app = FastAPI(title="Kanca Capture")
+    capture_app.include_router(http_capture.host_router)
+
+    app = FastAPI(lifespan=_make_lifespan(panel_app, capture_app), title="Kanca")
+    app.router.routes = [
+        Host(settings.panel_domain, app=panel_app, name="panel"),
+        Mount("/", app=capture_app, name="capture"),
+    ]
+else:
+    # path modu: tek uygulama, panel + /c/{token}/...
+    app = FastAPI(lifespan=_make_lifespan(), title="Kanca")
+    app.include_router(panel.router)
+    app.include_router(http_capture.path_router)
