@@ -10,9 +10,12 @@ güvenlik KARARI bağlanmaz — yalnızca bilgilendirme amaçlı sınıflandırm
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 import httpx
+
+log = logging.getLogger("kanca")
 from nopanic import (
     RetryBudget,
     adaptive_rate_limit,
@@ -64,8 +67,13 @@ def _cache_key(it: Interaction):
 #   retry(+budget)   -> geçici hatada tekrar dene, ama bütçeyle sınırlı
 #   adaptive_rate_limit -> 429/throttle görünce hızı otomatik kıs
 #   timeout          -> tek çağrıyı 10 sn ile sınırla
+def _ai_fallback(exc: Exception) -> dict[str, Any]:
+    log.warning("AI analizi basarisiz, fallback: %r", exc)
+    return dict(_FALLBACK)
+
+
 _ai_policy = compose(
-    fallback(lambda exc: dict(_FALLBACK), on=(Exception,)),
+    fallback(_ai_fallback, on=(Exception,)),
     cache(ttl=300.0, key=_cache_key, single_flight=True),
     circuit_breaker(
         failure_threshold=0.5, min_calls=5, window=30.0, reset_timeout=15.0, name="ai"

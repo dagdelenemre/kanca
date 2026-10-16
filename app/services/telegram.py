@@ -7,16 +7,24 @@ düşürmemeli: nopanic timeout/retry/fallback ile sarılır.
 from __future__ import annotations
 
 import html
+import logging
 from typing import Any
 
 import httpx
 from nopanic import compose, fallback, retry, timeout
 
+log = logging.getLogger("kanca")
+
 from app.config import get_settings
 from app.models import Interaction
 
+def _tg_fallback(exc: Exception) -> bool:
+    log.warning("Telegram bildirimi basarisiz, fallback: %r", exc)
+    return False
+
+
 _tg_policy = compose(
-    fallback(lambda exc: False, on=(Exception,)),
+    fallback(_tg_fallback, on=(Exception,)),
     retry(attempts=2),
     timeout(5.0),
 )
