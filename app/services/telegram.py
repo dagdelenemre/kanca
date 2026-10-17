@@ -48,14 +48,19 @@ def _format(count: int, first: Interaction, ai: dict[str, Any]) -> str:
     emoji = _RISK_EMOJI.get(risk, "⚪")
     indicators = ", ".join(ai.get("indicators", [])) or "Yok"
     extra = f" <b>(+{count - 1} benzer)</b>" if count > 1 else ""
-    return (
-        f"{emoji} <b>Etkileşim yakalandı</b>{extra}\n"
-        f"🏷️ <code>{_esc(first.token)}</code> · {_esc(first.protocol.value).upper()}\n"
-        f"🌐 Kaynak: <code>{_esc(first.source_ip)}</code>\n"
-        f"🧠 Risk: <b>{_esc(risk)}</b> · Tür: {_esc(ai.get('detected_type'))}\n"
-        f"🔎 Bulgular: {_esc(indicators)}\n"
-        f"📝 {_esc(ai.get('summary'))}"
-    )
+    conf = ai.get("confidence")
+    conf_txt = f" (~%{_esc(conf)} güven)" if conf is not None else ""
+    lines = [
+        f"{emoji} <b>Etkileşim yakalandı</b>{extra}",
+        f"🏷️ <code>{_esc(first.token)}</code> · {_esc(first.protocol.value).upper()}",
+        f"🌐 Kaynak: <code>{_esc(first.source_ip)}</code>",
+        f"🧠 Risk: <b>{_esc(risk)}</b> · Tür: {_esc(ai.get('detected_type'))}{conf_txt}",
+    ]
+    if ai.get("reasoning"):
+        lines.append(f"❓ Gerekçe: {_esc(ai.get('reasoning'))}")
+    lines.append(f"🔎 Bulgular: {_esc(indicators)}")
+    lines.append(f"📝 {_esc(ai.get('summary'))}")
+    return "\n".join(lines)
 
 
 @_tg_policy

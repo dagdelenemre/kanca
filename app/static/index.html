@@ -310,13 +310,23 @@ function renderInteraction(it) {
   const body = el("div", "body");
   // AI raporu (varsa)
   if (it.ai_report) {
+    const ar = it.ai_report;
     body.appendChild(el("h4", "", "AI analizi"));
     const risk = el("div");
-    const rl = (it.ai_report.risk_level || "UNKNOWN");
+    const rl = (ar.risk_level || "UNKNOWN");
     risk.appendChild(el("span", "risk " + rl, rl));
-    risk.appendChild(el("span", "", "  ·  " + (it.ai_report.detected_type || "")));
+    let line = "  ·  " + (ar.detected_type || "");
+    if (ar.confidence !== undefined && ar.confidence !== null) {
+      line += "  ·  ~%" + ar.confidence + " güven";
+    }
+    risk.appendChild(el("span", "", line));
     body.appendChild(risk);
-    body.appendChild(el("pre", "", it.ai_report.summary || ""));
+    if (ar.reasoning) {
+      const why = el("div", "hint", "Gerekçe: " + ar.reasoning);
+      why.style.marginTop = "6px";
+      body.appendChild(why);
+    }
+    body.appendChild(el("pre", "", ar.summary || ""));
   }
   if (proto === "http") {
     body.appendChild(el("h4", "", "Başlıklar"));
