@@ -36,15 +36,27 @@ hangi saldırı desenine BENZEDİĞİNİ söylemek, o türe NE KADAR benzediğin
 GÜVEN YÜZDESİ (0-100) ile vermek, bundan çıkan riski belirtmek ve NEDEN öyle \
 düşündüğünü (hangi göstergeye dayandığını) açıklamak.
 
-Kalibrasyon kuralları (abartma!):
-- Ortada payload/veri yoksa — düz bir isim çözümlemesi, boş/sıradan istek, \
-sağlık kontrolü — tür "Normal", güven DÜŞÜK (<=30), risk INFO/LOW olmalı. \
-Sadece bir şeyin OOB alanına bağlanmış olması tek başına yüksek risk DEĞİLDİR.
-- Yüksek güven + yüksek riski YALNIZCA net desen varken ver: JNDI ifadesi \
-(${jndi:...}), veri taşıyan alt alan/yol (base64/hex exfil), bilinen exploit \
-dizgesi, yakalanmış cookie/token/secret, komut enjeksiyonu izleri.
-- confidence = "veri bu türün desenine ne kadar uyuyor" olasılığı; emin \
-değilsen düşük tut. risk_level bu güvenden ve payload'ın etkisinden çıkar.
+EN ÖNEMLİ KURAL — capture domainini YOK SAY:
+Her etkileşimin Host'u / alt alan adı ZATEN `{token}.oob...` capture domainidir \
+ve HER yakalamada bulunur. Bu, aracın kendi adresidir; bir saldırı ya da \
+exfiltration KANITI DEĞİLDİR. Token'lı alt alanın varlığını, capture domainine \
+bağlanılmış olmasını ve "rastgele hex alt alan" görüntüsünü ASLA gösterge sayma. \
+Bunları analizin dışında tut.
+
+Yalnızca SALDIRGANIN GÖNDERDİĞİ gerçek içeriği değerlendir: yol (path), query \
+parametreleri, gövde, enjekte edilmiş dizgeler (`${jndi:...}`, exploit payload'u), \
+Host DIŞINDAKI anlamlı başlıklar, ve token'DAN BAŞKA veri (base64/hex) gömülü \
+alt alan/yol/query.
+
+Kalibrasyon:
+- Gerçek exfiltration = token'ın DIŞINDA, path/subdomain/query'ye gömülü VERİ \
+(base64/hex). Sadece token alt alanının çözülmesi exfiltration DEĞİLDİR.
+- Payload yoksa — sıradan bir yol (/status, /, /favicon.ico), boş gövde/query, \
+düz isim çözümlemesi — tür "Normal", güven ≤20, risk INFO. ("/status" masumdur.)
+- Yüksek güven + yüksek risk YALNIZCA path/query/body'de net desen varken: JNDI, \
+veri taşıyan base64/hex, bilinen exploit dizgesi, yakalanmış cookie/token/secret.
+- confidence = "GÖNDERİLEN PAYLOAD bu türün desenine ne kadar uyuyor"; payload \
+yoksa düşük tut. risk_level bu güvenden ve payload'ın etkisinden çıkar.
 
 SADECE şu JSON şemasında Türkçe yanıt dön:
 {
@@ -132,7 +144,7 @@ async def analyze(it: Interaction) -> dict[str, Any]:
         "temperature": 0.1,
         # gpt-oss gibi reasoning modelleri JSON'dan önce "düşünme" token'ı
         # harcar; düşük limit JSON tamamlanmadan dolup 400 verir. Bol tutuyoruz.
-        "max_tokens": 2000,
+        "max_tokens": 2800,
         "response_format": {"type": "json_object"},
     }
     async with httpx.AsyncClient(timeout=10.0) as client:
