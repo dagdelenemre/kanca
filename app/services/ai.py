@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any
 
 import httpx
@@ -115,10 +116,33 @@ _ai_policy = compose(
 )
 
 
+# Gizlilik: AI'ya gönderilen metinde sırları maskele (ham kayıt değişmez).
+_SECRET_KEYS = ("cookie", "set-cookie", "authorization", "x-api-key", "token",
+                "password", "secret", "api_key", "apikey")
+
+
+def _redact(blob: str) -> str:
+    # "anahtar": "değer" ve "anahtar: değer" kalıplarındaki hassas değerleri maskele.
+    for key in _SECRET_KEYS:
+        blob = re.sub(
+            rf'("{re.escape(key)}"\s*,\s*")[^"]+(")',
+            r"\1[REDACTED]\2", blob, flags=re.IGNORECASE,
+        )
+        blob = re.sub(
+            rf'("{re.escape(key)}"\s*:\s*")[^"]+(")',
+            r"\1[REDACTED]\2", blob, flags=re.IGNORECASE,
+        )
+    return blob
+
+
 def _build_user_content(it: Interaction) -> str:
+    settings = get_settings()
     p = it.parsed
     # Token bütçesini korumak için kırpılır (body + header + query birlikte).
-    blob = json.dumps(p, ensure_ascii=False)[:2000]
+    blob = json.dumps(p, ensure_ascii=False)
+    if settings.ai_redact:
+        blob = _redact(blob)
+    blob = blob[:2000]
     return f"<untrusted>\nprotocol={it.protocol.value}\n{blob}\n</untrusted>"
 
 

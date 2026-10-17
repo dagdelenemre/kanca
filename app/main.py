@@ -13,6 +13,7 @@ CAPTURE_MODE=host (üretim/VPS):
 """
 from __future__ import annotations
 
+import asyncio
 import ipaddress
 import logging
 from contextlib import asynccontextmanager
@@ -40,7 +41,8 @@ def _make_lifespan(*extra_apps: FastAPI):
         storage = Storage(settings.db_path)
         await storage.connect()
         bus = EventBus()
-        pipeline = Pipeline(storage, bus, settings.group_window_s)
+        pipeline = Pipeline(storage, bus, settings.group_window_s,
+                            settings.ai_max_per_group)
 
         # Paylaşılan servisleri (mount edilen) alt uygulamalara da bağla;
         # onların kendi lifespan'i çalışmadığından state'i elle veriyoruz.
@@ -91,9 +93,28 @@ def _make_lifespan(*extra_apps: FastAPI):
             except OSError as exc:
                 log.warning("%s dinleyici baslatilamadi (%s): %s", name, port, exc)
 
+        # Periyodik DB temizliği (retention): DB sınırsız büyümesin.
+        async def _cleanup_loop():
+            while True:
+                try:
+                    await asyncio.sleep(settings.cleanup_interval_s)
+                    n = await storage.cleanup(
+                        settings.max_interactions_per_token,
+                        settings.interaction_ttl_days,
+                    )
+                    if n:
+                        log.info("Temizlik: %d eski kayit silindi", n)
+                except asyncio.CancelledError:
+                    break
+                except Exception as exc:  # temizlik hatası servisi düşürmesin
+                    log.warning("Temizlik hatasi: %s", exc)
+
+        cleanup_task = asyncio.create_task(_cleanup_loop())
+
         try:
             yield
         finally:
+            cleanup_task.cancel()
             if dns is not None:
                 await dns.stop()
             for srv in tcp_servers:

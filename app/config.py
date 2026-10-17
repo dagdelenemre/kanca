@@ -47,6 +47,19 @@ class Settings(BaseSettings):
     # Gruplama penceresi (saniye): aynı token için bu süre içindeki
     # etkileşimler tek bildirimde toplanır.
     group_window_s: float = 5.0
+    # Bir gruptaki en fazla kaç etkileşime AI analizi yapılsın (fuzzing'de
+    # kotayı korur; normal çok-protokollü geri aramaları kapsar).
+    ai_max_per_group: int = 5
+
+    # Veri saklama: DB sınırsız büyümesin. Periyodik temizlik kanca başına son
+    # N kaydı tutar ve TTL'den eski kayıtları siler.
+    max_interactions_per_token: int = 500
+    interaction_ttl_days: float = 7.0
+    cleanup_interval_s: float = 3600.0
+
+    # Gizlilik: açıksa, AI'ya GÖNDERİLEN metinde cookie/authorization/token gibi
+    # sırlar maskelenir (ham kayıt değişmez). Hassas angajmanlarda aç.
+    ai_redact: bool = False
 
     # AI (OpenAI uyumlu uç; ai_api_key boşsa AI kapalı)
     ai_base_url: str = "https://api.groq.com/openai/v1"

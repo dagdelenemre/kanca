@@ -1,22 +1,23 @@
 """Yönetim arayüzü API'si (panel_domain üzerinde, auth'lu).
 
 Kanca oluşturma/listeleme/silme, mock güncelleme, etkileşim geçmişi ve canlı
-yayın (SSE). Tüm uçlar require_admin ile korunur; SSE token'ı query ile de
-kabul eder (EventSource header gönderemez).
+yayın (SSE). Tüm uçlar require_admin ile korunur. SSE dahil tarayıcı erişimi
+`POST /api/login` ile kurulan oturum çerezini kullanır — token URL'de taşınmaz,
+böylece erişim loglarına düşmez.
 """
 from __future__ import annotations
 
 import asyncio
 import json
 import os
-import secrets
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel
 
 from app.config import get_settings
 from app.models import Hook, MockConfig
+from app.routers import auth
 from app.routers.auth import require_admin
 
 router = APIRouter()
@@ -25,6 +26,31 @@ router = APIRouter()
 class CreateHookIn(BaseModel):
     label: str = ""
     notify: bool = True
+
+
+class LoginIn(BaseModel):
+    token: str = ""
+
+
+@router.post("/api/login")
+async def login(body: LoginIn, response: Response):
+    """Admin token'ı doğrula, HttpOnly oturum çerezi kur (SSE/panel için)."""
+    if not auth._token_ok(body.token):
+        raise HTTPException(status_code=401, detail="Yetkisiz")
+    sid = auth.create_session()
+    secure = get_settings().capture_mode == "host"  # prod HTTPS; localhost http
+    response.set_cookie(
+        auth.COOKIE_NAME, sid, httponly=True, secure=secure,
+        samesite="lax", max_age=auth._SESSION_TTL, path="/",
+    )
+    return {"ok": True}
+
+
+@router.post("/api/logout")
+async def logout(request: Request, response: Response):
+    auth.destroy_session(request.cookies.get(auth.COOKIE_NAME))
+    response.delete_cookie(auth.COOKIE_NAME, path="/")
+    return {"ok": True}
 
 
 @router.post("/api/hooks", dependencies=[Depends(require_admin)])
@@ -81,13 +107,10 @@ async def all_interactions(request: Request, limit: int = 100):
     return [i.model_dump(mode="json") for i in items]
 
 
-@router.get("/api/stream")
-async def stream(request: Request, token: str = Query(default="")):
-    # EventSource header gönderemediği için SSE auth'u query ile kabul edilir.
-    settings = get_settings()
-    if not token or not secrets.compare_digest(token, settings.admin_token):
-        raise HTTPException(status_code=401, detail="Yetkisiz")
-
+@router.get("/api/stream", dependencies=[Depends(require_admin)])
+async def stream(request: Request):
+    # Auth cookie ile (EventSource cookie gönderir); token artık URL'de değil,
+    # böylece erişim loglarına düşmez.
     bus = request.app.state.bus
     queue = await bus.subscribe()
 

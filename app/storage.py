@@ -10,7 +10,7 @@ import base64
 import json
 import os
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import aiosqlite
@@ -200,6 +200,33 @@ class Storage:
             (_dumps(report), interaction_id),
         )
         await self.db.commit()
+
+    @_on_locked
+    async def cleanup(self, max_per_token: int, ttl_days: float) -> int:
+        """DB'yi sınırla: TTL'den eski kayıtları sil ve kanca başına son
+        max_per_token kaydı tut. Silinen satır sayısını döndürür."""
+        total = 0
+        if ttl_days > 0:
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=ttl_days)).isoformat()
+            cur = await self.db.execute(
+                "DELETE FROM interactions WHERE timestamp < ?", (cutoff,)
+            )
+            total += cur.rowcount or 0
+        if max_per_token > 0:
+            # Pencere fonksiyonuyla her token'da en yeni N dışındakileri sil.
+            cur = await self.db.execute(
+                "DELETE FROM interactions WHERE id IN ("
+                "  SELECT id FROM ("
+                "    SELECT id, ROW_NUMBER() OVER "
+                "      (PARTITION BY token ORDER BY timestamp DESC) rn "
+                "    FROM interactions"
+                "  ) WHERE rn > ?"
+                ")",
+                (max_per_token,),
+            )
+            total += cur.rowcount or 0
+        await self.db.commit()
+        return total
 
     async def list_interactions(
         self, token: Optional[str] = None, limit: int = 100

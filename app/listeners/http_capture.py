@@ -176,6 +176,9 @@ async def _process_capture(
 def _mock_response(cfg: MockConfig) -> Response:
     # delay not: yanıt öncesi gecikme. (BackgroundTasks yanıttan sonra çalışır.)
     headers = dict(cfg.headers)
+    # Suistimal sertleştirmesi: tarayıcı MIME sniffing yapıp mock gövdesini
+    # HTML/JS gibi çalıştırmasın (phishing/malware hosting riskini azaltır).
+    headers.setdefault("X-Content-Type-Options", "nosniff")
     return _DelayedResponse(
         content=cfg.body,
         status_code=cfg.status_code,
